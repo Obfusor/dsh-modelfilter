@@ -26,6 +26,14 @@ function groupLabel(group) {
   return heading?.textContent ?? ''
 }
 
+function searchableText(element) {
+  return [
+    element.textContent ?? '',
+    element.getAttribute('title') ?? '',
+    element.getAttribute('aria-label') ?? '',
+  ].join(' ')
+}
+
 function filterMenu(menu, query) {
   const groups = Array.from(menu.querySelectorAll(GROUP_SELECTOR))
   let visible = 0
@@ -36,7 +44,7 @@ function filterMenu(menu, query) {
     for (const row of Array.from(group.querySelectorAll(ROW_SELECTOR))) {
       const matches = query.length === 0
         || groupNameMatches
-        || normalize(row.textContent ?? '').includes(query)
+        || normalize(searchableText(row)).includes(query)
       // The harness menu styles can override the browser's default `[hidden]`
       // rule, so set an explicit display rule as well.
       row.hidden = !matches

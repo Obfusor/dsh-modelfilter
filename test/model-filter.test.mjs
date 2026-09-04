@@ -22,3 +22,8 @@ test('model separators do not affect matching', () => {
   assert.equal(normalize('qwen3.8').includes(query), true)
   assert.equal(normalize('qwen-3-8').includes(query), true)
 })
+
+test('a spaced version query matches a hyphenated model name', () => {
+  const normalize = (value) => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+  assert.equal(normalize('Deepseek-v4-flash').includes(normalize('v4 flash')), true)
+})
