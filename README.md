@@ -20,7 +20,7 @@ Harness selection flow.
 After publishing this directory to a GitHub repository, install it with DSH:
 
 ```sh
-dsh plugin --profile web add github:<your-account>/<your-repository>
+dsh plugin --profile web add github:Obfusor/dsh-modelfilter
 ```
 
 For local development, DSH supports installing a local checkout or packed
