@@ -2,6 +2,7 @@ const FILTER_ATTRIBUTE = 'data-dsh-model-filter'
 const MENU_SELECTOR = '[role="menu"]'
 const GROUP_SELECTOR = '[role="group"]'
 const ROW_SELECTOR = '[role="menuitemradio"]'
+let compatibilityWarningShown = false
 
 function normalize(value) {
   // Treat common model-name separators as presentation only, so differently
@@ -10,8 +11,21 @@ function normalize(value) {
 }
 
 function isModelMenu(menu) {
-  return menu.querySelector(GROUP_SELECTOR) !== null
-    && menu.querySelector(ROW_SELECTOR) !== null
+  const groups = Array.from(menu.querySelectorAll(GROUP_SELECTOR))
+  const rows = Array.from(menu.querySelectorAll(ROW_SELECTOR))
+  if (groups.length === 0 || rows.length === 0) return false
+  // Compatibility guard: only touch menus whose model rows are still nested
+  // in provider groups. If DSH changes this contract, fail closed.
+  return rows.every(row => row.closest(GROUP_SELECTOR) !== null)
+}
+
+function warnIfUnsupported(menu) {
+  if (compatibilityWarningShown || menu.querySelector(ROW_SELECTOR) === null) return
+  compatibilityWarningShown = true
+  console.warn(
+    '[dsh-model-filter] No compatible provider-grouped model menu was found. '
+      + 'The DSH UI structure may have changed; filtering is disabled for this menu.',
+  )
 }
 
 function groupLabel(group) {
@@ -76,7 +90,11 @@ function filterMenu(menu, query) {
 }
 
 function installFilter(menu) {
-  if (menu.hasAttribute(FILTER_ATTRIBUTE) || !isModelMenu(menu)) return
+  if (menu.hasAttribute(FILTER_ATTRIBUTE)) return
+  if (!isModelMenu(menu)) {
+    warnIfUnsupported(menu)
+    return
+  }
   menu.setAttribute(FILTER_ATTRIBUTE, 'true')
 
   const input = document.createElement('input')

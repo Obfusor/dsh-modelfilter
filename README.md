@@ -42,4 +42,7 @@ node --test test/*.test.mjs
 ```
 
 The plugin targets the model menu’s stable ARIA roles rather than private CSS
-module class names, so it does not depend on generated class names.
+module class names, so it does not depend on generated class names. It also
+uses a runtime compatibility guard: if a future DSH release removes the
+provider-grouped menu structure, the plugin fails closed and reports one
+diagnostic in the browser console instead of modifying unrelated menus.
