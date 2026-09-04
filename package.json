@@ -1,0 +1,28 @@
+{
+  "name": "dsh-model-filter",
+  "version": "0.1.0",
+  "description": "Adds a filter box to DeepSeek Harness model pickers.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./client": {
+      "default": "./client.js"
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "README.md"],
+  "license": "MIT"
+}

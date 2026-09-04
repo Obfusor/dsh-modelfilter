@@ -1,0 +1,3 @@
+- insert:
+    - id: model-filter
+      name: dsh-model-filter
