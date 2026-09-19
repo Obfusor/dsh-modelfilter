@@ -227,7 +227,7 @@ function installFilter(menu) {
   clearBtn.type = 'button';
   clearBtn.setAttribute('aria-label', 'Clear filter');
   clearBtn.dataset.dshModelFilterClear = 'true';
-  clearBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+  clearBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" fill="none" stroke-width="1.5">
     <path d="M3.4 3.4l5.2 5.2m0-5.2l-5.2 5.2"/>
   </svg>`;
   clearBtn.style.cssText = `
