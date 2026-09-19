@@ -1,6 +1,6 @@
 {
   "name": "dsh-model-filter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Adds a filter box to DeepSeek Harness model pickers.",
   "type": "module",
   "main": "index.js",
@@ -24,5 +24,19 @@
     "test": "node --test test/*.test.mjs"
   },
   "files": ["index.js", "client.js", "cordis.patch.yml", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Obfusor/dsh-modelfilter.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "model-filter",
+    "ai-models"
+  ],
+  "bugs": {
+    "url": "https://github.com/Obfusor/dsh-modelfilter/issues"
+  },
   "license": "MIT"
 }
