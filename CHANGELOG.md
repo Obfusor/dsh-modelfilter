@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2025-07-14
+
+### Fixed
+- Infinite loop bug where searching for single characters (e.g., "1", "a") would freeze the browser due to re-entrant MutationObserver calls during filtering
+
 ## [0.2.0] - 2025-07-14
 
 ### Added

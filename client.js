@@ -267,6 +267,9 @@ function installFilter(menu) {
     clearBtn.style.display = input.value.length > 0 ? 'flex' : 'none';
   }
 
+  // Flag to prevent re-entrant filtering from MutationObserver
+  let isFiltering = false;
+
   // Debounced filter handler for performance
   let debounceTimer;
   const debouncedFilter = () => {
@@ -286,7 +289,12 @@ function installFilter(menu) {
         // Ignore storage errors
       }
       
-      filterMenu(menu, query);
+      isFiltering = true;
+      try {
+        filterMenu(menu, query);
+      } finally {
+        isFiltering = false;
+      }
     }, 100);
   };
 
@@ -303,7 +311,12 @@ function installFilter(menu) {
       // Ignore storage errors
     }
     
-    filterMenu(menu, '');
+    isFiltering = true;
+    try {
+      filterMenu(menu, '');
+    } finally {
+      isFiltering = false;
+    }
     input.focus();
   });
 
@@ -321,7 +334,15 @@ function installFilter(menu) {
         observer.disconnect();
         return;
       }
-      filterMenu(menu, normalize(input.value));
+      // Skip if we're already filtering (prevents infinite loop)
+      if (isFiltering) return;
+      
+      isFiltering = true;
+      try {
+        filterMenu(menu, normalize(input.value));
+      } finally {
+        isFiltering = false;
+      }
     } catch (e) {
       console.warn('[dsh-model-filter] Error in mutation observer:', e);
     }
