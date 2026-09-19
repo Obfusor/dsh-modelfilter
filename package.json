@@ -1,6 +1,6 @@
 {
   "name": "dsh-model-filter",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Adds a filter box to DeepSeek Harness model pickers.",
   "type": "module",
   "main": "index.js",

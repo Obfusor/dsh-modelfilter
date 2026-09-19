@@ -1,6 +1,6 @@
 /**
  * DSH Model Filter Plugin - Client Side
- * 
+ *
  * Adds a filter/search box to DeepSeek Harness model picker menus.
  * Works with both the /model popup and composer's model selector.
  */
@@ -10,6 +10,7 @@ const MENU_SELECTOR = '[role="menu"]';
 const GROUP_SELECTOR = '[role="group"]';
 const ROW_SELECTOR = '[role="menuitemradio"]';
 const STORAGE_KEY = 'dsh-model-filter-last-query';
+const DEBOUNCE_MS = 100;
 let compatibilityWarningShown = false;
 
 /**
@@ -105,13 +106,20 @@ function updateGroupIndicator(group, filtered, visibleCount, totalCount) {
  */
 function updateLiveRegion(liveRegion, query, visibleCount) {
   if (!liveRegion) return;
-  if (query.length === 0) {
-    liveRegion.textContent = '';
-  } else if (visibleCount === 0) {
-    liveRegion.textContent = 'No models match your filter.';
-  } else {
-    liveRegion.textContent = `${visibleCount} model${visibleCount !== 1 ? 's' : ''} match your filter.`;
+  let text = '';
+  if (query.length > 0) {
+    if (visibleCount === 0) {
+      text = 'No models match your filter.';
+    } else if (visibleCount === 1) {
+      text = '1 model matches your filter.';
+    } else {
+      text = `${visibleCount} models match your filter.`;
+    }
   }
+  // Assigning textContent always replaces the child text node, even when the
+  // string is unchanged, so it would queue a fresh childList mutation on every
+  // call and re-trigger our own observer. Only write when the text changes.
+  if (liveRegion.textContent !== text) liveRegion.textContent = text;
 }
 
 /**
@@ -123,30 +131,30 @@ function filterMenu(menu, query) {
 
   for (const group of groups) {
     const groupNameMatches = normalize(groupLabel(group)).includes(query);
+    const rows = Array.from(group.querySelectorAll(ROW_SELECTOR));
     let groupVisible = 0;
-    
-    for (const row of Array.from(group.querySelectorAll(ROW_SELECTOR))) {
+
+    for (const row of rows) {
       const matches = query.length === 0 ||
         groupNameMatches ||
         normalize(searchableText(row)).includes(query);
-      
-      // The harness menu styles can override the browser's default [hidden] rule,
-      // so set an explicit display rule as well.
+
+      // The harness menu styles can override the browser's default [hidden]
+      // rule, so set an explicit display rule as well.
       row.hidden = !matches;
       row.style.setProperty('display', matches ? '' : 'none', 'important');
-      
+
       if (matches) {
         groupVisible += 1;
         visible += 1;
       }
     }
-    
+
     group.hidden = groupVisible === 0;
     group.style.setProperty('display', groupVisible === 0 ? 'none' : '', 'important');
 
     // Show "(filtered)" indicator on group headings when filtering is active
-    updateGroupIndicator(group, query.length > 0, groupVisible, 
-      Array.from(group.querySelectorAll(ROW_SELECTOR)).length);
+    updateGroupIndicator(group, query.length > 0, groupVisible, rows.length);
   }
 
   // Update empty state message
@@ -167,8 +175,7 @@ function filterMenu(menu, query) {
   }
 
   // Update live region for accessibility
-  const liveRegion = menu.querySelector('[data-dsh-model-filter-live]');
-  updateLiveRegion(liveRegion, query, visible);
+  updateLiveRegion(menu.querySelector('[data-dsh-model-filter-live]'), query, visible);
 
   return visible;
 }
@@ -178,12 +185,12 @@ function filterMenu(menu, query) {
  */
 function installFilter(menu) {
   if (menu.hasAttribute(FILTER_ATTRIBUTE)) return null;
-  
+
   if (!isModelMenu(menu)) {
     warnIfUnsupported(menu);
     return null;
   }
-  
+
   menu.setAttribute(FILTER_ATTRIBUTE, 'true');
 
   // Create filter wrapper
@@ -251,74 +258,90 @@ function installFilter(menu) {
   menu.insertBefore(wrapper, menu.firstChild);
   menu.insertBefore(liveRegion, menu.firstChild);
 
-  // Restore last filter query from session storage
-  try {
-    const savedQuery = sessionStorage.getItem(STORAGE_KEY);
-    if (savedQuery) {
-      input.value = savedQuery;
-      updateClearButton();
-      filterMenu(menu, normalize(savedQuery));
-    }
-  } catch (e) {
-    // sessionStorage might not be available in all contexts
-  }
-
   function updateClearButton() {
     clearBtn.style.display = input.value.length > 0 ? 'flex' : 'none';
   }
 
-  // Flag to prevent re-entrant filtering from MutationObserver
-  let isFiltering = false;
+  // Re-entrancy guard for the observer below. MutationObserver callbacks are
+  // delivered as microtasks, so a flag cleared synchronously after filtering
+  // would already be false again by the time the callback runs. The barrier
+  // that actually works is observer.takeRecords(), called in applyFilter().
+  let applying = false;
 
-  // Debounced filter handler for performance
-  let debounceTimer;
-  const debouncedFilter = () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      updateClearButton();
-      const query = normalize(input.value);
-      
-      // Save to session storage
-      try {
-        if (input.value.length > 0) {
-          sessionStorage.setItem(STORAGE_KEY, input.value);
-        } else {
-          sessionStorage.removeItem(STORAGE_KEY);
-        }
-      } catch (e) {
-        // Ignore storage errors
-      }
-      
-      isFiltering = true;
-      try {
-        filterMenu(menu, query);
-      } finally {
-        isFiltering = false;
-      }
-    }, 100);
-  };
+  const observer = new MutationObserver(() => {
+    if (!menu.isConnected) {
+      observer.disconnect();
+      return;
+    }
+    if (applying) return;
+    applyFilter();
+  });
 
-  input.addEventListener('input', debouncedFilter);
-  
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    updateClearButton();
-    
-    // Clear saved state
+  /**
+   * Run the filter and discard the mutation records it produces. Without the
+   * takeRecords() call our own DOM writes re-trigger this observer, and each
+   * pass queues another microtask that writes again, which starves the event
+   * loop and freezes the page.
+   */
+  function applyFilter() {
+    applying = true;
     try {
-      sessionStorage.removeItem(STORAGE_KEY);
+      filterMenu(menu, normalize(input.value));
+    } catch (e) {
+      console.warn('[dsh-model-filter] Error while filtering:', e);
+    } finally {
+      observer.takeRecords();
+      applying = false;
+    }
+  }
+
+  function persistQuery() {
+    try {
+      if (input.value.length > 0) {
+        sessionStorage.setItem(STORAGE_KEY, input.value);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
     } catch (e) {
       // Ignore storage errors
     }
-    
-    isFiltering = true;
-    try {
-      filterMenu(menu, '');
-    } finally {
-      isFiltering = false;
-    }
+  }
+
+  let debounceTimer;
+  input.addEventListener('input', () => {
+    updateClearButton();
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      persistQuery();
+      applyFilter();
+    }, DEBOUNCE_MS);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    updateClearButton();
+    persistQuery();
+    applyFilter();
     input.focus();
   });
+
+  // Restore the previous query, if the browser still has one for this session.
+  try {
+    const savedQuery = sessionStorage.getItem(STORAGE_KEY);
+    if (savedQuery !== null) input.value = savedQuery;
+  } catch (e) {
+    // sessionStorage may be unavailable in some contexts
+  }
+  updateClearButton();
+
+  try {
+    observer.observe(menu, { childList: true, subtree: true });
+  } catch (e) {
+    console.warn('[dsh-model-filter] Failed to observe menu:', e);
+  }
+
+  // Apply after observe() so takeRecords() has an observer to drain.
+  applyFilter();
 
   // Auto-focus the filter when menu opens
   setTimeout(() => {
@@ -326,33 +349,6 @@ function installFilter(menu) {
       input.focus();
     }
   }, 50);
-
-  // Observe menu changes to re-apply filter
-  const observer = new MutationObserver(() => {
-    try {
-      if (!menu.isConnected) {
-        observer.disconnect();
-        return;
-      }
-      // Skip if we're already filtering (prevents infinite loop)
-      if (isFiltering) return;
-      
-      isFiltering = true;
-      try {
-        filterMenu(menu, normalize(input.value));
-      } finally {
-        isFiltering = false;
-      }
-    } catch (e) {
-      console.warn('[dsh-model-filter] Error in mutation observer:', e);
-    }
-  });
-
-  try {
-    observer.observe(menu, { childList: true, subtree: true });
-  } catch (e) {
-    console.warn('[dsh-model-filter] Failed to observe menu:', e);
-  }
 
   return { input, clearBtn, wrapper, liveRegion, observer };
 }
@@ -374,12 +370,16 @@ let installedFilters = [];
  */
 function apply() {
   installModelFilters();
-  
+
   const observer = new MutationObserver(() => {
     try {
       installModelFilters();
     } catch (e) {
       console.warn('[dsh-model-filter] Error installing filters:', e);
+    } finally {
+      // Installation inserts nodes into the tree. Drop those records so the
+      // body observer does not keep re-delivering for changes we caused.
+      observer.takeRecords();
     }
   });
 

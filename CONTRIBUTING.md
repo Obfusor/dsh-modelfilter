@@ -16,10 +16,39 @@ This project has no npm dependencies and runs entirely in the browser as a DSH c
 node --test test/*.test.mjs
 ```
 
-Tests cover:
-- Text normalization logic
-- Filter matching behavior
-- Edge cases with special characters and Unicode
+Two suites run:
+
+- `test/model-filter.test.mjs` — pure normalization and matching contract, no DOM.
+- `test/dom-behaviour.test.mjs` — drives the real `client.js` bundle through the
+  DOM shim in `test/fake-dom.mjs`: single-character queries, provider-name
+  matches, clearing, empty state, and idempotence of repeated filters.
+
+### Why the DOM shim exists
+
+The plugin observes its own subtree with a `MutationObserver`, and
+`MutationObserver` callbacks are delivered as **microtasks**. An observer that
+writes to its own subtree can therefore re-trigger itself forever; because the
+event loop never yields, the tab freezes and nothing reaches the console. That
+is exactly the 0.2.2 bug.
+
+`test/fake-dom.mjs` models the two details that make the loop possible:
+
+1. Observer callbacks are delivered as microtasks.
+2. Assigning `textContent` always replaces the child text node, so it queues a
+   `childList` record even when the string is unchanged.
+
+`dom-behaviour.test.mjs` also derives a pre-fix variant from `client.js` at
+runtime and asserts the harness flags it as a runaway. Keep that test: without
+it, the suite could pass simply because it is incapable of detecting the loop.
+
+Rules when editing `client.js`:
+
+- Never write to a node inside an observed subtree unconditionally. Guard the
+  write on an actual value change.
+- Any code that mutates the menu must run inside `applyFilter()`, which calls
+  `observer.takeRecords()` to drop the plugin's own mutations.
+- A boolean re-entrancy flag around the filter call does **not** work, because
+  it is reset before the microtask callback runs.
 
 ### Testing the Plugin Locally
 
